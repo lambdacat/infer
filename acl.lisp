@@ -17,9 +17,22 @@
 ;;;;
 ;;;; If not, see <http://www.gnu.org/licenses/>.
 
-;;;; INFER.LISP
+;;;; ACL.LISP
+;;;;
+;;;; An implementation of Antecedant Constraint Languages on LISP.
+;;;;
+;;;; Based roughly on the description in "Building Problem Solvers" by
+;;;; Kenneth D. Forbus and Johan de Kleer
 
-(in-package #:infer)
+(in-package #:acl)
 
-;;; "infer" goes here. Hacks and glory await!
+; (defmacro def-constraint (name cell* &body body))
 
+(defstruct (network (:predicate network?))
+  ;; All constraints in the network, indexed by their ID.
+  (constraint@ (make-array 31
+			   :fill-pointer 0))
+  ;; All cells in the network, indexed by their ID.
+  (cell@ (make-array 127
+		     :fill-pointer 0
+		     :element-type 'cell)))
