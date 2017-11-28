@@ -26,13 +26,26 @@
 
 (in-package #:acl)
 
-; (defmacro def-constraint (name cell* &body body))
+;; Shorthand for MAKE-ARRAY with options commonly used in this code.
+(defun mk-array (initial-capacity &optional (type t))
+  (make-array initial-capacity
+	      :fill-pointer 0
+	      :element-type type))
+
+(defstruct (cell (:predicate cell?))
+  id
+  ;; Constraints that reference this cell
+  (ref@ (mk-array 3 'constraint))
+  (value :unknown))
+
+(defstruct (constraint (:predicate constraint?))
+  id
+  ;; Cells referred to by this constraint, sorted by ID.
+  (cell@ (mk-array 3 'cell))
+  update-fn)
 
 (defstruct (network (:predicate network?))
   ;; All constraints in the network, indexed by their ID.
-  (constraint@ (make-array 31
-			   :fill-pointer 0))
+  (constraint@ (mk-array 31 'constraint))
   ;; All cells in the network, indexed by their ID.
-  (cell@ (make-array 127
-		     :fill-pointer 0
-		     :element-type 'cell)))
+  (cell@ (mk-array 127 'cell)))
