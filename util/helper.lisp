@@ -149,3 +149,43 @@
 (defmacro show (val)
   `(format t "~A := ~A~%" ',val ,val))
 
+
+;;; Queues
+
+(defstruct (queue (:predicate queue?))
+  (head nil)
+  (tail nil))
+
+(defmethod print-object ((q queue) s)
+  (format s "#<Queue~{ ~A~}>" (queue-head q)))
+
+(defun queue-empty? (q)
+  (declare (type queue q))
+  (perf:fastly
+    (nil? (queue-head q))))
+
+(defun queue-push (q &rest arg*)
+  (declare (type queue q))
+  (perf:fastly
+    (setf (queue-head q) (append arg* (queue-head q)))
+    (if (nil? (queue-tail q))
+	(setf (queue-tail q) (last (queue-head q))))
+    q))
+
+(defun enqueue (q &rest arg*)
+  (declare (type queue q))
+  (perf:fastly
+    (if (queue-empty? q)
+	(setf (queue-head q) (copy-list arg*)
+	      (queue-tail q) (last (queue-head q)))
+	(setf (cdr (queue-tail q)) (copy-list arg*)))
+    q))
+
+(defun queue (&rest arg*)
+  (apply #'enqueue (make-queue) arg*))
+
+(defun queue-pop (q)
+  (declare (type queue q))
+  (perf:fastly
+    (unless (queue-empty? q)
+      (pop (queue-head q)))))

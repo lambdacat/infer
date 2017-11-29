@@ -10,7 +10,31 @@
 
 (defpackage #:helper
   (:use #:cl)
-  (:export #:mapcart))
+  (:export #:mapcart
+	   #:queue
+	   #:queue?
+	   #:enqueue
+	   #:queue-push
+	   #:queue-pop
+	   #:zero?
+	   #:nil?
+	   #:cons?
+	   #:atom?
+	   #:list?
+	   #:length-is?
+	   #:show
+	   #:take
+	   #:drop
+	   #:rlambda
+	   #:rlet
+	   #:any
+	   #:fold
+	   #:vmapcar
+	   #:vmapcan
+	   #:vmaplist
+	   #:vmapcon
+	   #:with-gensyms
+	   #:inline-expand))
 
 (defpackage #:acl
   (:use #:cl #:helper))

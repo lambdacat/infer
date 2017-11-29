@@ -45,7 +45,13 @@
   update-fn)
 
 (defstruct (network (:predicate network?))
+  name ; symbol
   ;; All constraints in the network, indexed by their ID.
   (constraint@ (mk-array 31 'constraint))
   ;; All cells in the network, indexed by their ID.
-  (cell@ (mk-array 127 'cell)))
+  (cell@ (mk-array 127 'cell))
+  ;; Function to call if two constraints produce an answer for the same cell.
+  coincidence-handler
+  ;; Function to call if a cell is assigned contradictory values.
+  contradiction-handler)
+
