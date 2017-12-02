@@ -24,6 +24,13 @@
 
 (in-package #:helper)
 
+;; Bind gensyms to variables
+(defmacro with-gensyms ((&rest var*) &body body)
+  `(let ,(mapcar (lambda (v)
+		   `(,v (gensym ,(symbol-name v))))
+		 var*)
+     ,@body))
+
 ;;; Consistent Predicate Names
 
 (defun zero? (val)
@@ -34,6 +41,9 @@
 
 (defun cons? (val)
   (consp val))
+
+(defun symbol? (val)
+  (symbolp val))
 
 (defun atom? (val)
   (atom val))
@@ -65,6 +75,15 @@
   (nthcdr n ls))
 
 
+(defun filter (fn ls)
+  (cond ((nil? ls) ls)
+	((cons? ls)
+	 (if (funcall fn (car ls))
+	     (cons (car ls)
+		   (filter fn (cdr ls)))
+	     (filter fn (cdr ls))))
+	(t (error "Argument ~A to FILTER is not a list!." ls))))
+
 ;; A lambda form which can call itself recursively by NAME.
 ;;
 ;; Can't be called directly like LAMBDA.
@@ -77,6 +96,12 @@
 ;; RLAMBDA as LET is to LAMBDA.
 (defmacro rlet (name (&rest let-arg*) &body body)
   `(funcall (rlambda ,name ,(mapcar #'car let-arg*)
+	      ,@(mapcan
+		 (lambda (let-arg)
+		   (let ((type (getf (cddr let-arg) :TYPE)))
+		     (when type
+		       (list `(declare (type ,type ,(car let-arg)))))))
+		 let-arg*)
 	      ,@body)
 	    ,@(mapcar #'cadr let-arg*)))
 
@@ -118,24 +143,78 @@
 	       (apply fn accum (mapcar #'car list*))
 	       (mapcar #'cdr list*)))))
 
+(defun mapfilter (fn &rest list*)
+  (nreverse
+   (apply #'fold
+	  (lambda (sofar &rest arg*)
+	    (let ((res (apply fn arg*)))
+	      (if res
+		  (cons res sofar)
+		  sofar)))
+	  list*)))
+
+;;; Control constructs that introduce bindings
+
+(defmacro vif (var expr then &body else)
+  (with-gensyms (tmp)
+    `(let ((,tmp ,expr))
+       (if ,tmp
+	   (let ((,var ,tmp))
+	     ,then)
+	   ,(car else)))))
+
+(defmacro vwhen (var expr &body body)
+  `(vif ,var ,expr
+       (progn ,@body)))
+
+(defmacro vwhile (var expr &body body)
+  (with-gensyms (rec)
+    `(rlet ,rec ()
+       (vwhen ,var ,expr
+	 ,@body
+	 (,rec)))))
+
 (defmacro def-vmap (base-fn vname)
   `(defmacro ,vname ((&rest list-spec*) &body body)
-     `(,',base-fn (lambda ,(mapcar #'car list-spec*)
-		    ,@body)
-		  ,@(mapcar #'cadr list-spec*))))
 
+     (flet
+	 ;; The argument name to bind to the list's elements
+	 ((list-spec->arg (sym list &key type map filter)
+	    (declare (ignore list type map filter))
+	    sym)
+	  ;; The type declaration (if any) for the elements
+	  (list-spec->declare (sym list &key type map filter)
+	    (declare (ignore list map filter))
+	    (when type
+	      ;; This will be MAPCAN'd so return a list result.
+	      (list `(declare (type ,type ,sym)))))
+	  ;; The full expression for the list, including map/filter.
+	  (list-spec->expr (sym list &key type map filter)
+	    (declare (ignore sym type))
+	    (when map
+	      (setf list `(mapcar ,map ,list)))
+	    (when filter
+	      (setf list `(filter ,filter ,list)))
+	    list)
+	  ;; Apply a function to each list of arguments in ARG**.
+	  (mapply (fn arg**)
+	    (mapcar (lambda (arg*)
+		      (apply fn arg*))
+		    arg**)))
+       
+       `(,',base-fn (lambda ,(mapply #'list-spec->arg list-spec*)
+		      ,@(mapcan (lambda (list-spec)
+				  (apply #'list-spec->declare list-spec))
+				list-spec*)
+		      ,@body)
+		    ,@(mapply #'list-spec->expr list-spec*)))))
+(def-vmap mapc vmapc)
 (def-vmap mapcar vmapcar)
 (def-vmap mapcan vmapcan)
 (def-vmap maplist vmaplist)
 (def-vmap mapcon vmapcon)
 
 ;;; Macro helpers
-
-;; Bind gensyms to variables
-(defmacro with-gensyms ((&rest var*) &body body)
-  `(let ,(vmapcar ((v var*))
-	   `(,v (gensym ,(symbol-name v))))
-     ,@body))
 
 ;; Calls to INLINE-EXPAND expand to the result of evaluating BODY.
 (defmacro inline-expand (&body body)
@@ -167,18 +246,24 @@
 (defun queue-push (q &rest arg*)
   (declare (type queue q))
   (perf:fastly
-    (setf (queue-head q) (append arg* (queue-head q)))
-    (if (nil? (queue-tail q))
-	(setf (queue-tail q) (last (queue-head q))))
+    (if (queue-empty? q)
+	(setf (queue-tail q)
+	      (last (setf (queue-head q)
+			  (copy-list arg*))))
+	(setf (queue-head q)
+	      (append arg* (queue-head q))))
     q))
 
 (defun enqueue (q &rest arg*)
   (declare (type queue q))
   (perf:fastly
     (if (queue-empty? q)
-	(setf (queue-head q) (copy-list arg*)
-	      (queue-tail q) (last (queue-head q)))
-	(setf (cdr (queue-tail q)) (copy-list arg*)))
+	(setf (queue-tail q)
+	      (last (setf (queue-head q)
+			  (copy-list arg*))))
+	(setf (queue-tail q)
+	      (last (setf (cdr (queue-tail q))
+			  (copy-list arg*)))))
     q))
 
 (defun queue (&rest arg*)
@@ -189,3 +274,39 @@
   (perf:fastly
     (unless (queue-empty? q)
       (pop (queue-head q)))))
+
+;;; Simple functional tricks
+
+;;; CLAMBDA stands for Constant Lambda. The function takes any number
+;;; of arguments, but does not look at them. It always evaluates the
+;;; same expression.
+(defmacro clambda (&body body)
+  (with-gensyms (arg*)
+    `(lambda (&rest ,arg*)
+       (declare (ignore ,arg*))
+       ,@body)))
+
+;;; Bind a prefix of the arguments to a function.
+(defun curry (fn &rest bound*)
+  (lambda (&rest arg*)
+    (apply fn (append bound* arg*))))
+
+;;; Array processing functions
+
+;;; Visit the elements of an array, along with their indices.
+(defun amapc (fn arr)
+  (declare (type vector arr))
+  (let ((limit (length arr)))
+    (declare (type fixnum limit))
+    (perf:fastly
+      (rlet rec ((idx 0))
+	(declare (type fixnum idx))
+	(when (< idx limit)
+	  (perf:safely
+	    (funcall fn idx (aref arr idx)))
+	  (rec (1+ idx)))))))
+
+(defmacro avmapc ((idx var arr) &body body)
+  `(amapc (lambda (,idx ,var)
+	    ,@body)
+	  ,arr))

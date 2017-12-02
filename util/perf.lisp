@@ -26,7 +26,7 @@
 
 (in-package #:perf)
 
-(defvar *debug-build* t)
+(defvar *debug-build* nil)
 
 ;; Ensure that the code in this block has safety checks enabled.
 (defmacro safely (&body body)

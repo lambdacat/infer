@@ -19,6 +19,7 @@
 	   #:zero?
 	   #:nil?
 	   #:cons?
+	   #:symbol?
 	   #:atom?
 	   #:list?
 	   #:length-is?
@@ -29,12 +30,18 @@
 	   #:rlet
 	   #:any
 	   #:fold
+	   #:vif
+	   #:vwhen
+	   #:vwhile
 	   #:vmapcar
 	   #:vmapcan
 	   #:vmaplist
 	   #:vmapcon
+	   #:vmapc
 	   #:with-gensyms
-	   #:inline-expand))
+	   #:inline-expand
+	   #:amapc
+	   #:avmapc))
 
 (defpackage #:acl
   (:use #:cl #:helper))
